@@ -4,17 +4,16 @@ for the subject wallet's 15 fill transactions, re-verify/extend block timestamps
 and bisect the two ET-aligned window boundaries on-chain (no interpolation for claims).
 
 Writes:
-  claude_pack/receipts_15tx.json   raw eth_getTransactionReceipt output, 15 txs
-  claude_pack/block_ts.json        {block: {ts, utc, how}} merged with raw/blocks.json anchors
+  raw/receipts_15tx.json          raw eth_getTransactionReceipt output, 15 txs
+  raw/block_ts.json               {block: {ts, utc, how}} merged with raw/blocks.json anchors
 Prints a summary: per-tx status/log-count, sum in/out from receipt cache, ET boundaries.
 """
 import json, time, datetime, os, urllib.request
 
 BASE = os.environ.get('BASE_DIR') or os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(BASE, 'raw')
-PACK = os.path.join(BASE, 'claude_pack')
 W = '0x31a56e9e690c621ed21de08cb559e9524cdb8ed9'
-os.makedirs(PACK, exist_ok=True)
+os.makedirs(RAW, exist_ok=True)
 
 ENDPOINTS = [
     'https://polygon.drpc.org',
@@ -75,7 +74,7 @@ for i, tx in enumerate(txs):
         i + 1, tx[:12], int(r['blockNumber'], 16), r.get('status'), len(logs), top))
     time.sleep(0.12)
 
-json.dump(receipts, open(PACK + '/receipts_15tx.json', 'w'), indent=1)
+json.dump(receipts, open(RAW + '/receipts_15tx.json', 'w'), indent=1)
 
 # rebuild wallet_receipt_cash.json FROM the fresh receipts (USDC.e Transfer logs touching
 # the wallet): downstream self-checks (cluster_slice.py) read this file; it is an output,
@@ -150,13 +149,13 @@ def block_at_ts(target, lo, hi):
     return lo, hi
 
 b_dec30_et_start = block_at_ts(1767072000, 80966779, 81139571)[1]   # start cut = ET Dec 30 00:20 (05:20:00Z); true ET-midnight block is ~1,600 blocks lower by uniform 2.000 s/block cadence (see REPORT section 6; zero cluster fills in between)
-b_jan3_et_end    = block_at_ts(1767416400, 81139571, 81182771)[0]   # last block with ts < ET Jan 3 00:00 (Jan 3 05:00Z); end exclusive
-print('ET-aligned window blocks: [%s .. %s)  | start ts %s | last-before-end ts %s' % (
+b_jan3_et_end    = block_at_ts(1767416400, 81139571, 81182771)[0] + 1  # first block with ts >= ET Jan 3 00:00 (Jan 3 05:00Z); end-exclusive
+print('ET-aligned window blocks: [%s .. %s)  | start ts %s | first-excluded ts %s' % (
     b_dec30_et_start, b_jan3_et_end, bt[b_dec30_et_start]['utc'], bt[b_jan3_et_end]['utc']))
 final = {str(k): v for k, v in bt.items() if not isinstance(k, str) or k.isdigit()}
 keys = sorted(final.keys(), key=int)
 final = {k: final[k] for k in keys}
 final['_et_boundaries'] = {'start_block': b_dec30_et_start, 'end_block_exclusive': b_jan3_et_end,
                            'start_utc': bt[b_dec30_et_start]['utc'], 'end_utc': bt[b_jan3_et_end]['utc']}
-json.dump(final, open(PACK + '/block_ts.json', 'w'), indent=1)
+json.dump(final, open(RAW + '/block_ts.json', 'w'), indent=1)
 print('block_ts.json written: %d numeric blocks' % len(keys))

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """build_artifacts.py - generate the submission's data/ CSVs from raw JSON evidence.
 
-Inputs (RAW_DIR, default: sibling dir "raw_next_to_parent"): receipts_15tx.json,
+Inputs (RAW_DIR, default: code/raw - checked in): receipts_15tx.json,
 receipts_redeems.json, dataapi_activity.json, fills_cluster_window.jsonl.
 Outputs (DATA_DIR): wallet_activity.csv, fills_cluster_window.csv.gz, redemptions.csv,
 receipts_summary.csv, window_multipliers.csv, funding_ladder.csv, ranking.csv, SHA256SUMS.
@@ -12,7 +12,8 @@ independent recomputation pass (see REPORT.md section 6).
 import csv, glob, gzip, hashlib, io, json, os, sys
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # submission dir
-RAW_DIR = os.environ.get("RAW_DIR", os.path.join(BASE, "raw"))
+RAW_DIR = os.environ.get("RAW_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "raw"))
+# raw inputs are vendored at code/raw (see README); RAW_DIR relocation still supported
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE, "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
 USDC_E = "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
@@ -76,7 +77,6 @@ if os.path.exists(sl):
     out, n = os.path.join(DATA_DIR, "fills_cluster_window.csv.gz"), 0
     with open(sl) as f:
         # fixed mtime so the artifact + its SHA256 are reproducible
-        rows = ["\t".join([])]
         buf, w = io.StringIO(), None
         for line in f:
             if not line.strip():
@@ -105,17 +105,16 @@ if r15 is not None:
     write_csv("receipts_summary.csv", list(usdc_flows(r15)),
               ["transaction_hash", "block", "timestamp", "usdc_e_in", "usdc_e_out"])
 
-# 5) window multipliers (verified tables - see REPORT.md section 6)
+# 5) window multipliers (verified literal tables - see REPORT.md sections 5-6); the jan31 row
+# is measured inside the CFTC window for all four wallets (the withdrawn 1.1108 mixed a
+# full-scan other-three total with the victim's window; the mk+tk "mixed frame" column was
+# removed 2026-10-28: the tk numerators double-counted counterparty cash, see REPORT.md)
 write_csv("window_multipliers.csv", [
-    {"window": "CFTC Dec30-Jan4", "victim_mk_sh": 460552.9, "other3_mk_sh": 510734.1,
-     "other3_mk_tk_sh": 651456.0, "ratio_all_mk": 1.1090, "ratio_mixed": 1.4145},
-    {"window": "jan31-only", "victim_mk_sh": 436759.6, "other3_mk_sh": 485144.5,
-     "other3_mk_tk_sh": 623497.4, "ratio_all_mk": 1.1108, "ratio_mixed": 1.4276},
-    {"window": "ET-aligned Dec30-Jan2", "victim_mk_sh": 460552.9, "other3_mk_sh": 259955.8,
-     "other3_mk_tk_sh": 318883.0, "ratio_all_mk": 0.5644, "ratio_mixed": 0.6924},
-    {"window": "strict-UTC Dec30-Jan3", "victim_mk_sh": 201881.6, "other3_mk_sh": 234535.3,
-     "other3_mk_tk_sh": 283588.9, "ratio_all_mk": 1.1617, "ratio_mixed": 1.4047},
-], ["window", "victim_mk_sh", "other3_mk_sh", "other3_mk_tk_sh", "ratio_all_mk", "ratio_mixed"])
+    {"window": "CFTC Dec30-Jan4", "victim_mk_sh": 460552.9, "other3_mk_sh": 510734.1, "ratio_all_mk": 1.1090},
+    {"window": "jan31-only (CFTC window)", "victim_mk_sh": 436759.6, "other3_mk_sh": 448977.7, "ratio_all_mk": 1.0280},
+    {"window": "ET-aligned Dec30-Jan2", "victim_mk_sh": 460552.9, "other3_mk_sh": 259955.8, "ratio_all_mk": 0.5644},
+    {"window": "strict-UTC Dec30-Jan3", "victim_mk_sh": 201881.6, "other3_mk_sh": 234535.3, "ratio_all_mk": 1.1617},
+], ["window", "victim_mk_sh", "other3_mk_sh", "ratio_all_mk"])
 
 # 6) funding ladder (complaint para 50 - receipt-verified)
 write_csv("funding_ladder.csv", [
@@ -133,10 +132,10 @@ write_csv("ranking.csv", [
      "heuristics_met": "H1,H2,H3,H4,H5,H6", "receipts_fetched": "yes",
      "note": " indictment/case wallet; every dollar receipt-anchored"},
     {"wallet": "0xa72db174...ebd4", "rank": 2, "score_fraction": "3/6",
-     "heuristics_met": "H4,H5,H6 (H1 unverifiable, no receipts)", "receipts_fetched": "no",
-     "note": "one tx (Jan 2 21:44Z, announcement day), 19 fills, mk avg $0.0716, no other fills in 12 days"},
+     "heuristics_met": "H4,H5,H6 (H1 not assessed, no receipts)", "receipts_fetched": "no",
+     "note": "one tx (Jan 2 21:44Z block 81,135,501, announcement day): one order, 80,764.9 Yes / $5,782.66, filled against 70 counterparty orders (71 OrderFilled rows); no other fills in 12 days"},
     {"wallet": "0x858d551d...1047", "rank": 3, "score_fraction": "2/6",
-     "heuristics_met": "H5,H6 (H1 unverifiable)", "receipts_fetched": "no",
+     "heuristics_met": "H5,H6 (H1 not assessed)", "receipts_fetched": "no",
      "note": "7 markets, jan31 rank 5 overall (258,256.2 sh), mk avg $0.344 on jan31"},
     {"wallet": "0x6d7776a0...b72c", "rank": 4, "score_fraction": "1/6",
      "heuristics_met": "H6", "receipts_fetched": "no",

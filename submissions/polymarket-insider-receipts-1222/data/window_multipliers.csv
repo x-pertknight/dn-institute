@@ -1,5 +1,5 @@
-window,victim_mk_sh,other3_mk_sh,other3_mk_tk_sh,ratio_all_mk,ratio_mixed
-CFTC Dec30-Jan4,460552.9,510734.1,651456.0,1.109,1.4145
-jan31-only,436759.6,485144.5,623497.4,1.1108,1.4276
-ET-aligned Dec30-Jan2,460552.9,259955.8,318883.0,0.5644,0.6924
-strict-UTC Dec30-Jan3,201881.6,234535.3,283588.9,1.1617,1.4047
+window,victim_mk_sh,other3_mk_sh,ratio_all_mk
+CFTC Dec30-Jan4,460552.9,510734.1,1.109
+jan31-only (CFTC window),436759.6,448977.7,1.028
+ET-aligned Dec30-Jan2,460552.9,259955.8,0.5644
+strict-UTC Dec30-Jan3,201881.6,234535.3,1.1617

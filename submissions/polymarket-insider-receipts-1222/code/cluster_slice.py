@@ -20,8 +20,7 @@ from collections import defaultdict
 
 BASE = os.environ.get('BASE_DIR') or os.path.dirname(os.path.abspath(__file__))
 RAW = BASE + '/raw'
-PACK = BASE + '/claude_pack'
-os.makedirs(PACK, exist_ok=True)
+os.makedirs(RAW, exist_ok=True)
 
 W = '0x31a56e9e690c621ed21de08cb559e9524cdb8ed9'
 PREFIXES = ['0x31a56e9e', '0x858d551d', '0xa72db174', '0x6d7776a0']
@@ -217,8 +216,8 @@ wins = {
     'strict_utc_dec30_jan3': (WIN_UTC[0], WIN_UTC[1], 'strict UTC Dec30-Jan3'),
 }
 ETS = {}
-if os.path.exists(PACK + '/block_ts.json'):
-    bts = json.load(open(PACK + '/block_ts.json'))
+if os.path.exists(RAW + '/block_ts.json'):
+    bts = json.load(open(RAW + '/block_ts.json'))   # vendored raw/block_ts.json (corrected end cut)
     if '_et_boundaries' in bts:
         sb, eb = bts['_et_boundaries']['start_block'], bts['_et_boundaries']['end_block_exclusive']
         wins['et_aligned_dec30_jan2'] = (sb, eb - 1,
@@ -279,10 +278,13 @@ recs = json.load(open(RAW + '/wallet_receipt_cash.json'))
 receipts_out = sum(r['out'] for r in recs)   # 13 buy txs: wallet -> exchange USDC.e, micro-exact
 receipts_in = sum(r['in'] for r in recs)     # 2 sell txs: exchange -> wallet
 mk_usd = sum(AGG[W]['buy_usd_mk'].values())
+mk_sell_usd = AGG[W]['sell_usd_mk']
 mk_j31 = sum(AGG[W]['buy_sh_mk'].get(s, 0.0) for s in AGG[W]['buy_sh_mk'] if is_j31(s))
 mk_j31_usd = sum(AGG[W]['buy_usd_mk'].get(s, 0.0) for s in AGG[W]['buy_sh_mk'] if is_j31(s))
 rep.append('mk-frame buy cash $%.2f vs receipts sum(out) $%.6f -> %s (tolerance $0.01)'
            % (mk_usd, receipts_out, 'PASS' if abs(mk_usd - receipts_out) < 0.01 else 'FAIL'))
+rep.append('mk-frame sell cash $%.2f vs receipts sum(in) $%.6f -> %s (tolerance $0.01)'
+           % (mk_sell_usd, receipts_in, 'PASS' if abs(mk_sell_usd - receipts_in) < 0.01 else 'FAIL'))
 act_path = os.path.join(RAW, 'dataapi_activity.json')
 act = json.load(open(act_path)) if os.path.exists(act_path) else []
 j31_sh = sum(float(a.get('size', 0)) for a in act if a.get('type') == 'TRADE'

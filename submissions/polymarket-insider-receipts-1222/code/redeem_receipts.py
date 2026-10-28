@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Fetch RAW on-chain receipts for the wallet's redemption txs found in the Polymarket
-data-api activity (type REDEEM/CONVERT) -> pack/receipts_redeems.json; extend block_ts.json
+data-api activity (type REDEEM/CONVERT) -> raw/receipts_redeems.json; extend block_ts.json
 with their blocks (timestamp via eth_getBlockByNumber).
 """
 import json, os, time, datetime, urllib.request
 
-BASE = '/Users/marco/inca-1222'
-PACK = BASE + '/claude_pack'
+BASE = os.environ.get('BASE_DIR') or os.path.dirname(os.path.abspath(__file__))
+RAW = BASE + '/raw'
 ENDPOINTS = ['https://polygon.drpc.org', 'https://polygon-bor-rpc.publicnode.com', 'https://polygon.1rpc.io']
 HDR = {'User-Agent': 'curl/8.7.1', 'Content-Type': 'application/json'}
 
@@ -36,7 +36,7 @@ print('REDEEM/CONVERT activity rows:', len(reds))
 for i in reds:
     print(json.dumps(i)[:300])
 
-path = PACK + '/receipts_redeems.json'
+path = RAW + '/receipts_redeems.json'
 existing = json.load(open(path)) if os.path.exists(path) else []
 have = set(r.get('transactionHash') for r in existing)
 for i in reds:
@@ -56,14 +56,14 @@ for i in reds:
 
 json.dump(existing, open(path, 'w'), indent=1)
 
-if os.path.exists(PACK + '/block_ts.json'):
-    bts = json.load(open(PACK + '/block_ts.json'))
+if os.path.exists(RAW + '/block_ts.json'):
+    bts = json.load(open(RAW + '/block_ts.json'))
     for r in existing:
         b = int(r['blockNumber'], 16)
         if str(b) not in bts:
             blk = rpc('eth_getBlockByNumber', ['0x%x' % b, False])
             ts = int(blk['timestamp'], 16)
             bts[str(b)] = {'ts': ts, 'utc': utc(ts), 'how': 'eth_getBlockByNumber (2026-10-28)'}
-    json.dump(bts, open(PACK + '/block_ts.json', 'w'), indent=1)
+    json.dump(bts, open(RAW + '/block_ts.json', 'w'), indent=1)
     print('block_ts.json: %d numeric blocks' % len([k for k in bts if str(k).isdigit()]))
 print('receipts_redeems.json: %d receipts' % len(existing))
