@@ -1,0 +1,5 @@
+wallet,rank,score_fraction,heuristics_met,receipts_fetched,note
+0x31a56e9e...8ed9 (Burdensome-Mix),1,6/6,"H1,H2,H3,H4,H5,H6",yes, indictment/case wallet; every dollar receipt-anchored
+0xa72db174...ebd4,2,3/6,"H4,H5,H6 (H1 unverifiable, no receipts)",no,"one tx (Jan 2 21:44Z, announcement day), 19 fills, mk avg $0.0716, no other fills in 12 days"
+0x858d551d...1047,3,2/6,"H5,H6 (H1 unverifiable)",no,"7 markets, jan31 rank 5 overall (258,256.2 sh), mk avg $0.344 on jan31"
+0x6d7776a0...b72c,4,1/6,H6,no,"bulk is the 2025 contract, not the January one; resolution-family adjacency only"
