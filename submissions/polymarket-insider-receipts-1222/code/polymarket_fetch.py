@@ -91,6 +91,11 @@ def rpc_post(url, payload, timeout=30):
         return None, "HTTP %d %s" % (e.code, detail)
     except Exception as e:  # network/timeout
         return None, "NET %s" % str(e)[:200]
+    if isinstance(body, list):  # JSON-RPC batch: list of {id, result?, error?}
+        errs = [i.get("error") for i in body if i.get("error")]
+        if errs:
+            return None, "RPC %s %s" % (errs[0].get("code"), str(errs[0].get("message"))[:250])
+        return body, None
     if "error" in body and body["error"]:
         err = body["error"]
         return None, "RPC %s %s" % (err.get("code"), str(err.get("message"))[:250])
@@ -426,6 +431,8 @@ def cmd_ts():
             if err:
                 raise RuntimeError(err)
         for item in res:
+            if not isinstance(item, dict) or not item.get("result") or "number" not in item["result"]:
+                raise RuntimeError("batch item missing result/block (null response) id=%s" % item.get("id"))
             blk = int(item["result"]["number"], 16)
             cache[str(blk)] = int(item["result"]["timestamp"], 16)
         if (i // B) % 50 == 0:

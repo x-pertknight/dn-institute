@@ -24,22 +24,32 @@ mint/merge) poison naive fills-only parsers — they invent ~$6,080 of phantom b
     txs + 2 redemptions; per-tx USDC.e flows (the arbiter for every number).
   - `analyze.py` — day-1 verification + clustering pass against `raw/fills.jsonl`.
   - `cluster_slice.py` — frame-separated (maker/taker) rebuild for the 4 cluster wallets,
-    receipts self-check → `csv/`+ `cluster_stats.txt`.
-  - `build_artifacts.py` — generates everything in `data/` from the raw JSON.
-Raw JSONs live in `raw/` beside the scripts (each script derives its own `raw/` from
-`dirname(__file__)`); `build_artifacts.py` regenerates everything in `data/` and takes
-`RAW_DIR`/`DATA_DIR` env overrides. Stdlib only — no requirements.
+    self-check against receipts (`raw/wallet_receipt_cash.json`, rebuilt from receipts by
+    `receipts_fetch.py`) + against the wallet's self-reported activity for share counts,
+    → `raw/fills_cluster_window.jsonl` + `cluster_stats.txt`.
+  - `build_artifacts.py` — generates the four receipt-derived tables in `data/` from raw JSON.
+Raw JSONs live in `raw/` beside the scripts (each script derives its own `raw/` via
+`BASE_DIR`/`dirname(__file__)`); `build_artifacts.py` regenerates the four receipt-derived
+CSVs (`RAW_DIR`/`DATA_DIR` env overrides). The remaining three
+(`window_multipliers.csv`, `funding_ladder.csv`, `ranking.csv`) are static copies of figures
+independently re-verified in `REPORT.md` §6 — stated as static, not hidden behind a compute
+step. Stdlib only, no requirements.
 
 ## How to reproduce
 
 ```bash
-python3 code/polymarket_fetch.py   # writes code/raw/fills.jsonl (the full scan; ~1h on free RPCs)
-python3 code/dataapi.py            # public activity API
-python3 code/receipts_fetch.py     # 15 fill-tx receipts
-python3 code/redeem_receipts.py    # 2 redemption receipts
-python3 code/cluster_slice.py      # frame-separated rebuild + receipt self-check
-RAW_DIR="$PWD/code/raw" python3 code/build_artifacts.py   # regenerates data/*.csv + SHA256SUMS
+python3 code/polymarket_fetch.py --meta    # token map
+python3 code/polymarket_fetch.py --blocks  # block anchors (checkpointed)
+python3 code/polymarket_fetch.py --probe   # optional RPC pool probe
+python3 code/polymarket_fetch.py --scan 80793979 81312371   # full OrderFilled scan -> code/raw/fills.jsonl (124,850 fills; ~1h on free RPCs)
+python3 code/dataapi.py                    # wallet activity + positions -> code/raw/dataapi_activity.json
+python3 code/receipts_fetch.py             # 15 fill-tx + 2 redemption receipts; writes code/raw/wallet_receipt_cash.json (from receipts) + code/claude_pack/{receipts_15tx,block_ts}.json
+python3 code/redeem_receipts.py            # redemption receipts detail
+python3 code/cluster_slice.py              # frame-separated rebuild + self-check -> code/raw/fills_cluster_window.jsonl + cluster_stats.txt
+RAW_DIR="$PWD/code/raw" python3 code/build_artifacts.py    # regenerates data/*.csv + SHA256SUMS
 ```
+All scripts accept `BASE_DIR` to relocate; stdlib only. The full chain-scan window and all block
+anchors are RPC-verified.
 
 Public endpoints only; no keys; no paid APIs. The full chain-scan window and all block anchors
 are RPC-verified (`block_ts.json` is available on request).

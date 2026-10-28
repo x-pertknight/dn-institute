@@ -12,13 +12,13 @@ Frames kept SEPARATE (they are NOT the same cash):
                mint bookkeeping - proven by receipts; kept in the stats for transparency)
 
 Writes:
-  claude_pack/fills_cluster_window.jsonl  (original rows, verbatim, sorted by block)
-  cluster_stats.txt                       (human-readable summary; also printed to stdout)
+  raw/fills_cluster_window.jsonl   (original rows, verbatim, sorted by block; read by build_artifacts.py)
+  cluster_stats.txt                (human-readable summary at BASE root; also printed)
 """
 import json, os
 from collections import defaultdict
 
-BASE = '/Users/marco/inca-1222'
+BASE = os.environ.get('BASE_DIR') or os.path.dirname(os.path.abspath(__file__))
 RAW = BASE + '/raw'
 PACK = BASE + '/claude_pack'
 os.makedirs(PACK, exist_ok=True)
@@ -97,10 +97,16 @@ def is_cluster(v):
     return None
 
 f.seek(0)
+seen = set()  # exact-row dedupe: a resumed scan may re-write a chunk (write/fsync happens before set_pos)
+cluster_rows = []
 for line in f:
     if not any(p in line.lower() for p in PREFIXES):
         continue
     j = json.loads(line)
+    key = json.dumps(j, sort_keys=True)
+    if key in seen:
+        continue
+    seen.add(key)
     if is_cluster(j.get(KM)) or is_cluster(j.get(KT)):
         cluster_rows.append(j)
         txset.add(str(j.get(KTX)).lower())
@@ -120,10 +126,10 @@ for line in f:
 f.close()
 
 all_rows = sorted(cluster_rows + sisters, key=lambda r: (r.get(KB, 0), str(r.get(KTX))))
-with open(PACK + '/fills_cluster_window.jsonl', 'w') as out:
+with open(RAW + '/fills_cluster_window.jsonl', 'w') as out:
     for r in all_rows:
         out.write(json.dumps(r) + '\n')
-print('pack: %d cluster rows + %d sister rows = %d rows -> fills_cluster_window.jsonl'
+print('slice: %d cluster rows + %d sister rows = %d rows -> raw/fills_cluster_window.jsonl'
       % (len(cluster_rows), len(sisters), len(all_rows)))
 
 # ---- frame-aware classification ----
@@ -216,7 +222,7 @@ if os.path.exists(PACK + '/block_ts.json'):
     if '_et_boundaries' in bts:
         sb, eb = bts['_et_boundaries']['start_block'], bts['_et_boundaries']['end_block_exclusive']
         wins['et_aligned_dec30_jan2'] = (sb, eb - 1,
-            'ET-aligned Dec30-Jan2 (RPC-verified boundaries %s->%s)' % (bts['_et_boundaries'].get('start_utc'), bts['_et_boundaries'].get('end_utc')))
+            'ET-aligned Dec30-Jan2 window (start cut = 00:20 ET; see REPORT §6 for why the literal-midnight block is not used)')
         ETS = bts['_et_boundaries']
 
 rep = []
@@ -268,13 +274,26 @@ for j in sorted(cluster_rows, key=lambda r: (r.get(KB, 0), str(r.get(KTX)))):
         r['b'], tx[:10], r['in'], r['out'], kind, frm, slug or '?', sh if sh and kind == 'buy' else (j.get(KMI, 0) / 1e6 if frm == 'mk' and kind == 'sell' else 0), cash if cash else 0))
 
 rep.append('')
-rep.append('=== SELF-CHECK vs receipts (mk-frame must reproduce them) ===')
+rep.append('=== SELF-CHECK: mk-frame vs receipts (cash, exact) + activity (shares, self-reported) ===')
+recs = json.load(open(RAW + '/wallet_receipt_cash.json'))
+receipts_out = sum(r['out'] for r in recs)   # 13 buy txs: wallet -> exchange USDC.e, micro-exact
+receipts_in = sum(r['in'] for r in recs)     # 2 sell txs: exchange -> wallet
 mk_usd = sum(AGG[W]['buy_usd_mk'].values())
 mk_j31 = sum(AGG[W]['buy_sh_mk'].get(s, 0.0) for s in AGG[W]['buy_sh_mk'] if is_j31(s))
 mk_j31_usd = sum(AGG[W]['buy_usd_mk'].get(s, 0.0) for s in AGG[W]['buy_sh_mk'] if is_j31(s))
-rep.append('mk-frame buy cash: $%.2f vs receipts $33934.34 -> %s' % (mk_usd, 'PASS' if abs(mk_usd - 33934.34) < 5 else 'FAIL'))
-rep.append('mk-frame jan31:   %.1f sh ($%.2f) vs 436759.6 ($32538.34) -> %s ; avg $%.4f'
-           % (mk_j31, mk_j31_usd, 'PASS' if abs(mk_j31 - 436759.6) < 1 and abs(mk_j31_usd - 32538.34) < 2 else 'FAIL', mk_j31_usd / mk_j31 if mk_j31 else 0))
+rep.append('mk-frame buy cash $%.2f vs receipts sum(out) $%.6f -> %s (tolerance $0.01)'
+           % (mk_usd, receipts_out, 'PASS' if abs(mk_usd - receipts_out) < 0.01 else 'FAIL'))
+act_path = os.path.join(RAW, 'dataapi_activity.json')
+act = json.load(open(act_path)) if os.path.exists(act_path) else []
+j31_sh = sum(float(a.get('size', 0)) for a in act if a.get('type') == 'TRADE'
+             and str(a.get('slug', '')).startswith('maduro-out-by-january-31') and a.get('outcome') == 'Yes')
+j31_usd = sum(float(a.get('usdcSize', 0)) for a in act if a.get('type') == 'TRADE'
+              and str(a.get('slug', '')).startswith('maduro-out-by-january-31') and a.get('outcome') == 'Yes')
+rep.append('mk-frame jan31 %.1f sh ($%.2f) vs activity %.1f sh ($%.2f) -> %s ; avg $%.4f'
+           % (mk_j31, mk_j31_usd, j31_sh, j31_usd,
+              'PASS' if abs(mk_j31 - j31_sh) < 0.02 and abs(mk_j31_usd - j31_usd) < 0.01 else 'FAIL',
+              mk_j31_usd / mk_j31 if mk_j31 else 0))
+rep.append('[shares are not receipt-provable: activity rows = the wallet\'s own self-reported trade history on the data API; the cash leg is receipt-arbitrated exactly]')
 
 txt = '\n'.join(rep)
 open(BASE + '/cluster_stats.txt', 'w').write(txt)

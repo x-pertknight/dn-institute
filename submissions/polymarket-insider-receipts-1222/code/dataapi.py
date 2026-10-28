@@ -3,7 +3,11 @@
 GET /activity?user=... paginated (type=TRADE,REDEEM,CONVERT...), GET /positions.
 Read-only public API.
 """
-import json, urllib.request, urllib.parse
+import json, urllib.request, urllib.parse, os
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+RAW = os.path.join(BASE, "raw")
+os.makedirs(RAW, exist_ok=True)
 
 W = "0x31a56e9e690c621ed21de08cb559e9524cdb8ed9"
 
@@ -43,7 +47,7 @@ if items:
     print("first date:", items[0].get("timestamp"), " last:", items[-1].get("timestamp"))
     for i in items[:6]:
         print(json.dumps(i)[:240])
-    json.dump(items, open("raw/dataapi_activity.json", "w"))
+    json.dump(items, open(os.path.join(RAW, "dataapi_activity.json"), "w"))
 for ep in ("value",):
     try:
         print(ep, json.dumps(get("%s/value?%s" % (base, urllib.parse.urlencode({"user": W}))))[:300])
@@ -52,7 +56,7 @@ for ep in ("value",):
 try:
     pos = get("%s/positions?%s" % (base, urllib.parse.urlencode({"user": W})))
     print("positions:", len(pos))
-    json.dump(pos, open("raw/dataapi_positions.json", "w"))
+    json.dump(pos, open(os.path.join(RAW, "dataapi_positions.json"), "w"))
     for p in pos[:8]:
         print(json.dumps({k: p.get(k) for k in ("title", "outcome", "size", "avgPrice", "curPrice", "redeemable")})[:200])
 except Exception as e:

@@ -12,8 +12,11 @@ with every dollar backed by an on-chain USDC.e receipt (`eth_getTransactionRecei
 
 - **13 buys = indictment "13 separate occasions" (¶11)**: $96.00, $1,238.34, $85.00, $1,000.00,
   $100.00, $5,000.00, $100.00, $6,000.00, $50.00, $6,000.00, $50.00, $7,000.00, $7,215.00 =
-  **$33,934.34** (indictment ¶10 "approximately $33,934"). The DOJ press release's "$33,034" is
-  an erratum; the on-chain receipts settle it.
+  **$33,934.34** (indictment ¶10 "approximately $33,934"; on-chain sum in
+  `data/receipts_summary.csv`). Secondary sources disagree on the printed figure — $33,034
+  appears in some summaries (e.g. Dentons, ABC News), $33,934 in others; we do not attribute an
+  "erratum" to any document without quoting its primary text. The on-chain receipts total is
+  $33,934.34 exactly.
 - **maduro-out-by-january-31: 436,759.61 Yes for $32,538.34 (avg $0.07450) = complaint ¶52**
   (rounded there as ">436,000 / ~$0.074 / ~$32,538").
 - **Funding ladder = complaint ¶50**: 14,619.33 shares on Dec 30 evening ET (2 txs, 19:20/22:02 ET);
@@ -28,7 +31,10 @@ with every dollar backed by an on-chain USDC.e receipt (`eth_getTransactionRecei
 - **Proceeds: $443,815.29 in** = redemption 436,759.61 USDC.e (Jan 3 13:41:49Z = 8:41 AM ET, ≈4h21m
   after the ~4:21 AM EST announcement (4h20m49s), ¶13) + redemption 1,197.77 (20:25:23Z) + sales
   $5,857.90 (17,857.88 invade @ $0.176 + 5,371.68 war-powers @ $0.5054, Jan 4 00:02-00:03Z = the
-  evening of Jan 3 ET, ¶56).
+  evening of Jan 3 ET, ¶56). Components are shown rounded to the cent and sum to 443,815.28;
+  the total 443,815.29 comes from unrounded micro-USDC receipt values (see
+  `data/receipts_summary.csv`), as does the funding ladder's 436,759.61 (its rounded parts sum
+  to 436,759.60). Rounding note, not a discrepancy.
 - **Profit: $409,880.95 = DOJ ¶15 "approximately $409,881"**; jan31-only
   436,759.61 − 32,538.34 = **$404,221.27 = CFTC ¶53 "more than $404,000"**.
 - **13 buy occasions + 2 sale transactions = the 15 receipted transactions** (¶11 counts buy
@@ -109,8 +115,13 @@ the 3rd-largest jan31 buyer in the full 124,850-fill scan.
 
 ## Method
 1. Gamma (no auth): market resolution; 32 token IDs across the Maduro/Venezuela family.
-2. OrderFilled scan (CTF Exchange `0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e` + neg-risk
-   adapter `0x4d97dcd97e...`), Polygon public RPC (drpc/publicnode/1rpc), Dec 26 - Jan 7
+2. OrderFilled/OrdersMatched **topic0-filtered scan with no emitter allow-list**, Polygon
+   public RPC (drpc/publicnode/1rpc), Dec 26 - Jan 7, ~124,850 fills. The cluster's fills are
+   all emitted by the **CTF Exchange** `0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e`
+   (composite mirror legs arise through neg-risk mint/merge routed via the adapter
+   `0xd91e80cf2e7be2e162c6513ced06f1dd0da35296`; `0x4d97dcd97e...` is the ConditionalTokens
+   contract, not an exchange). Dec 30 - Jan 4 window shown; Dec 26-29 rows outside the wallet's
+   funding/activity range excluded from artifacts.
    (blocks 80,793,979-81,312,371), checkpointed, 124,850 fills.
 3. USDC.e receipts for the wallet's 15 fill txs + 2 redemptions; timestamps for 59 anchor blocks.
 4. Frame-separated classification + receipts self-check (`cluster_slice.py`, PASS/PASS).

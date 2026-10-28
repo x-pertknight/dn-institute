@@ -9,7 +9,7 @@ receipts_summary.csv, window_multipliers.csv, funding_ladder.csv, ranking.csv, S
 All numeric values come from raw on-chain receipts or from tables verified by an
 independent recomputation pass (see REPORT.md section 6).
 """
-import csv, glob, gzip, hashlib, json, os, sys
+import csv, glob, gzip, hashlib, io, json, os, sys
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # submission dir
 RAW_DIR = os.environ.get("RAW_DIR", os.path.join(BASE, "raw"))
@@ -47,7 +47,7 @@ def usdc_flows(receipts):
             ts = ts or str(int(log.get("blockTimestamp", "0"), 16))
             block = block or str(int(log.get("blockNumber", "0"), 16))
         yield {"transaction_hash": r.get("transactionHash", ""), "block": block,
-               "timestamp": ts, "usdc_e_in": f"{tmin:.2f}", "usdc_e_out": f"{tmax:.2f}"}
+               "timestamp": ts, "usdc_e_in": "%.6f" % tmin, "usdc_e_out": "%.6f" % tmax}
 
 def write_csv(name, rows, keys):
     with open(os.path.join(DATA_DIR, name), "w", newline="") as f:
@@ -74,19 +74,24 @@ if act is not None:
 sl = os.path.join(RAW_DIR, "fills_cluster_window.jsonl")
 if os.path.exists(sl):
     out, n = os.path.join(DATA_DIR, "fills_cluster_window.csv.gz"), 0
-    with open(sl) as f, gzip.open(out, "wt", newline="") as g:
-        w = None
+    with open(sl) as f:
+        # fixed mtime so the artifact + its SHA256 are reproducible
+        rows = ["\t".join([])]
+        buf, w = io.StringIO(), None
         for line in f:
             if not line.strip():
                 continue
             row = json.loads(line)
             row = {k: row.get(k, "") for k in ["b", "tx", "li", "mk", "tk", "ma", "ta", "mi", "ti", "em", "f"]}
             if w is None:
-                w = csv.DictWriter(g, fieldnames=list(row))
+                w = csv.DictWriter(buf, fieldnames=list(row))
                 w.writeheader()
             w.writerow(row)
             n += 1
-    print(f"wrote fills_cluster_window.csv.gz ({n} rows)")
+        data = buf.getvalue().encode()
+    with open(out, "wb") as fobj, gzip.GzipFile(fileobj=fobj, mode="wb", mtime=0) as gz:
+        gz.write(data)
+    print(f"wrote fills_cluster_window.csv.gz ({n} rows, mtime=0)")
 
 # 3) redemptions
 rr = load("receipts_redeems.json")

@@ -10,8 +10,10 @@ Prints a summary: per-tx status/log-count, sum in/out from receipt cache, ET bou
 """
 import json, time, datetime, os, urllib.request
 
-BASE = '/Users/marco/inca-1222'
-PACK = BASE + '/claude_pack'
+BASE = os.environ.get('BASE_DIR') or os.path.dirname(os.path.abspath(__file__))
+RAW = os.path.join(BASE, 'raw')
+PACK = os.path.join(BASE, 'claude_pack')
+W = '0x31a56e9e690c621ed21de08cb559e9524cdb8ed9'
 os.makedirs(PACK, exist_ok=True)
 
 ENDPOINTS = [
@@ -43,9 +45,19 @@ HX = lambda n: '0x%x' % int(n)
 def utc(ts):
     return datetime.datetime.fromtimestamp(int(ts), datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-# ---- 15 receipts ----
-recs_in = json.load(open(BASE + '/raw/wallet_receipt_cash.json'))
-txs = [r['tx'] for r in recs_in]
+# ---- wallet fill txs -> receipts ----
+# tx list: from a previously built raw/wallet_receipt_cash.json if present,
+# else derived from the wallet's public activity (raw/dataapi_activity.json TRADE rows)
+wc = os.path.join(RAW, 'wallet_receipt_cash.json')
+if os.path.exists(wc):
+    recs_in = json.load(open(wc))
+    txs = [r['tx'] for r in recs_in]
+    print('tx source: %s (%d txs)' % (wc, len(txs)))
+else:
+    act = json.load(open(os.path.join(RAW, 'dataapi_activity.json')))
+    txs = sorted({a['transactionHash'] for a in act if a.get('type') == 'TRADE'})
+    recs_in = None
+    print('tx source: derived from raw/dataapi_activity.json TRADE rows (%d unique txs)' % len(txs))
 receipts = []
 for i, tx in enumerate(txs):
     r = rpc('eth_getTransactionReceipt', [tx])
@@ -64,9 +76,34 @@ for i, tx in enumerate(txs):
     time.sleep(0.12)
 
 json.dump(receipts, open(PACK + '/receipts_15tx.json', 'w'), indent=1)
-tot_in = sum(r['in'] for r in recs_in)
-tot_out = sum(r['out'] for r in recs_in)
-print('15 receipts -> receipts_15tx.json  | wallet_receipt_cash totals: IN $%.2f OUT $%.2f' % (tot_in, tot_out))
+
+# rebuild wallet_receipt_cash.json FROM the fresh receipts (USDC.e Transfer logs touching
+# the wallet): downstream self-checks (cluster_slice.py) read this file; it is an output,
+# not a trusted input. Per-tx values are exact micro-USDC.
+USDC_E = '0x2791bca1f2de4661ed88a30c99a7a9449aa84174'
+TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+WLOWER = W[2:].lower()
+cash_rows = []
+for r, tx in zip(receipts, txs):
+    cin, cout, blk = 0.0, 0.0, ''
+    for lg in r.get('logs', []):
+        if (lg.get('address') or '').lower() != USDC_E:
+            continue
+        tp = lg.get('topics') or []
+        if tp and tp[0] == TRANSFER and len(tp) == 3:
+            frm, to = tp[1][-40:].lower(), tp[2][-40:].lower()
+            amt = int(lg['data'], 16) / 1e6
+            if to == WLOWER:
+                cin += amt
+            if frm == WLOWER:
+                cout += amt
+        blk = blk or str(int(lg.get('blockNumber', '0x0'), 16))
+    cash_rows.append({'tx': tx, 'b': int(blk) if blk else '', 'in': cin, 'out': cout})
+json.dump(cash_rows, open(os.path.join(RAW, 'wallet_receipt_cash.json'), 'w'), indent=1)
+print('wallet_receipt_cash.json rebuilt from receipts (%d txs) — input for cluster_slice self-check' % len(cash_rows))
+tot_in = sum(r['in'] for r in cash_rows)
+tot_out = sum(r['out'] for r in cash_rows)
+print('15 receipts -> receipts_15tx.json + wallet_receipt_cash.json  | cash IN $%.2f OUT $%.2f' % (tot_in, tot_out))
 
 # ---- block timestamps (merge anchors; refetch everything used in text) ----
 bt = {}
@@ -112,7 +149,7 @@ def block_at_ts(target, lo, hi):
     get_ts(lo); get_ts(hi)
     return lo, hi
 
-b_dec30_et_start = block_at_ts(1767072000, 80966779, 81139571)[1]   # first block with ts >= ET Dec 30 00:00 (Dec 30 05:00Z)
+b_dec30_et_start = block_at_ts(1767072000, 80966779, 81139571)[1]   # start cut = ET Dec 30 00:20 (05:20:00Z); true ET-midnight block is ~1,600 blocks lower by uniform 2.000 s/block cadence (see REPORT section 6; zero cluster fills in between)
 b_jan3_et_end    = block_at_ts(1767416400, 81139571, 81182771)[0]   # last block with ts < ET Jan 3 00:00 (Jan 3 05:00Z); end exclusive
 print('ET-aligned window blocks: [%s .. %s)  | start ts %s | last-before-end ts %s' % (
     b_dec30_et_start, b_jan3_et_end, bt[b_dec30_et_start]['utc'], bt[b_jan3_et_end]['utc']))
