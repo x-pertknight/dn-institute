@@ -68,5 +68,5 @@ are RPC-verified (block timestamps shipped in `code/raw/block_ts.json`).
 
 ## Submission note
 
-Every number in `REPORT.md` is anchored to an on-chain receipt or raw file in `data/`.
+Every number in `REPORT.md` is anchored to an on-chain receipt or raw file in `code/raw/`.
 Corrections to earlier versions are listed there.
