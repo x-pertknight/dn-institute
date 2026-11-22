@@ -1,0 +1,4 @@
+*.pyc
+__pycache__/
+csv/
+case_wallet_stats.txt
